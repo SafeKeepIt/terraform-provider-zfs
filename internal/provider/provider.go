@@ -43,8 +43,9 @@ func New(version string) func() *schema.Provider {
 					DefaultFunc: schema.EnvDefaultFunc("ZFS_PROVIDER_USERNAME", nil),
 				},
 				"host": {
+					Description: "Host to reach over SSH. `localhost` runs the zfs commands on this machine directly, without SSH: `user`, `port` and the key settings are then ignored and no SSH server is needed.",
 					Type:        schema.TypeString,
-					Optional:    true,
+					Required:    true,
 					DefaultFunc: schema.EnvDefaultFunc("ZFS_PROVIDER_HOSTNAME", nil),
 				},
 				"port": {
@@ -71,12 +72,6 @@ func New(version string) func() *schema.Provider {
 					Type:        schema.TypeString,
 					Optional:    true,
 					DefaultFunc: schema.EnvDefaultFunc("ZFS_PROVIDER_PASSWORD", nil),
-				},
-				"local": {
-					Description: "Run zfs commands on this machine directly instead of over SSH. `host`, `user`, `port` and the key settings are then ignored, and no SSH server is needed. `command_prefix` still applies.",
-					Type:        schema.TypeBool,
-					Optional:    true,
-					DefaultFunc: schema.EnvDefaultFunc("ZFS_PROVIDER_LOCAL", false),
 				},
 				"command_prefix": {
 					Description: "Can be used to prefix all ssh commands issued on the target host. For example, a command_prefix of 'sudo' can be used to elevate privileges on the target host, assuming password-less is configured for the user",
@@ -118,9 +113,9 @@ func configure(version string, p *schema.Provider) func(context.Context, *schema
 			}
 		}
 
-		local := d.Get("local").(bool)
-		if !local && (d.Get("host").(string) == "" || d.Get("user").(string) == "") {
-			return nil, diag.Errorf("host and user are required unless local = true")
+		local := d.Get("host").(string) == "localhost"
+		if !local && d.Get("user").(string) == "" {
+			return nil, diag.Errorf("user is required unless host is localhost")
 		}
 		return &Config{
 			command_prefix: d.Get("command_prefix").(string),
