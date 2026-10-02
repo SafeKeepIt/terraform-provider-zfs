@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +16,16 @@ import (
 
 func callSshCommand(config *Config, cmd string, args ...interface{}) (string, error) {
 	cmd = fmt.Sprintf(cmd, args...)
-	log.Printf("[DEBUG] ssh command: %s %s", config.command_prefix, cmd)
-	stdout, stderr, done, err := config.ssh.Run(config.command_prefix+" "+cmd, 60*time.Second)
+	var stdout, stderr string
+	var done bool
+	var err error
+	if config.local {
+		log.Printf("[DEBUG] local command: %s %s", config.command_prefix, cmd)
+		stdout, stderr, done, err = runLocal(config.command_prefix+" "+cmd, 60*time.Second)
+	} else {
+		log.Printf("[DEBUG] ssh command: %s %s", config.command_prefix, cmd)
+		stdout, stderr, done, err = config.ssh.Run(config.command_prefix+" "+cmd, 60*time.Second)
+	}
 
 	if stderr != "" {
 		if strings.Contains(stderr, "dataset does not exist") {
@@ -35,6 +46,33 @@ func callSshCommand(config *Config, cmd string, args ...interface{}) (string, er
 	}
 
 	return strings.TrimSuffix(stdout, "\n"), nil
+}
+
+// runLocal runs a command line on this machine the way sshd would run it for
+// the SSH transport: through /bin/sh -c, so the quoting the callers already do
+// for the remote shell is interpreted identically. It returns the same four
+// values as easyssh's Run, so callSshCommand treats both transports alike: a
+// non-empty stderr is the error, a timeout is "not done".
+func runLocal(command string, timeout time.Duration) (string, string, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, "/bin/sh", "-c", command)
+	var out, errb bytes.Buffer
+	c.Stdout, c.Stderr = &out, &errb
+	err := c.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out.String(), errb.String(), false, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		// A command that ran and failed: easyssh reports that through stderr
+		// and done=true, not through err. Keep the same contract.
+		if errb.Len() == 0 {
+			errb.WriteString(fmt.Sprintf("command exited with status %d", exitErr.ExitCode()))
+		}
+		return out.String(), errb.String(), true, nil
+	}
+	return out.String(), errb.String(), err == nil, err
 }
 
 type Ownership struct {
