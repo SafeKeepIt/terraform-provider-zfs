@@ -85,25 +85,28 @@ func dataSourceFilesystemRead(ctx context.Context, d *schema.ResourceData, meta 
 	d.SetId(filesystem.guid)
 
 	if filesystem.mountpoint != "" && filesystem.mountpoint != "none" && filesystem.mountpoint != "legacy" {
-		owner, err := getFileOwnership(config, filesystem.mountpoint)
-		if err != nil {
-			return diag.FromErr(err)
-		}
+		// An unmounted filesystem has no ownership to read, and its mountpoint may not even exist
+		if filesystem.mounted == "yes" {
+			owner, err := getFileOwnership(config, filesystem.mountpoint)
+			if err != nil {
+				return diag.FromErr(err)
+			}
 
-		if err := d.Set("owner", owner.userName); err != nil {
-			return diag.FromErr(err)
-		}
+			if err := d.Set("owner", owner.userName); err != nil {
+				return diag.FromErr(err)
+			}
 
-		if err = d.Set("group", owner.groupName); err != nil {
-			return diag.FromErr(err)
-		}
+			if err = d.Set("group", owner.groupName); err != nil {
+				return diag.FromErr(err)
+			}
 
-		if err = d.Set("uid", owner.uid); err != nil {
-			return diag.FromErr(err)
-		}
+			if err = d.Set("uid", owner.uid); err != nil {
+				return diag.FromErr(err)
+			}
 
-		if err = d.Set("gid", owner.gid); err != nil {
-			return diag.FromErr(err)
+			if err = d.Set("gid", owner.gid); err != nil {
+				return diag.FromErr(err)
+			}
 		}
 
 		if err = d.Set("mountpoint", filesystem.mountpoint); err != nil {

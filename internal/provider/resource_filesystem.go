@@ -178,34 +178,38 @@ func resourceFilesystemRead(ctx context.Context, d *schema.ResourceData, meta in
 	}
 
 	if filesystem.mountpoint != "none" && filesystem.mountpoint != "legacy" {
-		log.Println("[DEBUG] Fetching filesystem mountpoint ownership information")
-		ownership, err := getFileOwnership(config, filesystem.mountpoint)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-
-		// Ignore any values not explicitly tracked by terraform
-		if _, ok := d.GetOk("owner"); ok {
-			if err = d.Set("owner", ownership.userName); err != nil {
+		// An unmounted filesystem has no ownership to read, and its mountpoint may not even exist,
+		// so leave whatever is already in the state
+		if filesystem.mounted == "yes" {
+			log.Println("[DEBUG] Fetching filesystem mountpoint ownership information")
+			ownership, err := getFileOwnership(config, filesystem.mountpoint)
+			if err != nil {
 				return diag.FromErr(err)
 			}
-		}
 
-		if _, ok := d.GetOk("group"); ok {
-			if err = d.Set("group", ownership.groupName); err != nil {
-				return diag.FromErr(err)
+			// Ignore any values not explicitly tracked by terraform
+			if _, ok := d.GetOk("owner"); ok {
+				if err = d.Set("owner", ownership.userName); err != nil {
+					return diag.FromErr(err)
+				}
 			}
-		}
 
-		if _, ok := d.GetOk("gid"); ok {
-			if err = d.Set("gid", ownership.gid); err != nil {
-				return diag.FromErr(err)
+			if _, ok := d.GetOk("group"); ok {
+				if err = d.Set("group", ownership.groupName); err != nil {
+					return diag.FromErr(err)
+				}
 			}
-		}
 
-		if _, ok := d.GetOk("uid"); ok {
-			if err = d.Set("uid", ownership.uid); err != nil {
-				return diag.FromErr(err)
+			if _, ok := d.GetOk("gid"); ok {
+				if err = d.Set("gid", ownership.gid); err != nil {
+					return diag.FromErr(err)
+				}
+			}
+
+			if _, ok := d.GetOk("uid"); ok {
+				if err = d.Set("uid", ownership.uid); err != nil {
+					return diag.FromErr(err)
+				}
 			}
 		}
 	} else {
